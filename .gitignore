@@ -1,0 +1,40 @@
+# 环境变量和敏感配置
+docker/.env
+.env
+.env.local
+*.key
+*.pem
+
+# Node modules
+node_modules/
+workers/node_modules/
+
+# 备份文件
+backups/
+
+# 日志
+logs/
+*.log
+
+# Docker volumes (由 Docker 管理)
+volumes/
+
+# 临时文件
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Wrangler
+.wrangler/
+.dev.vars
+
+# 构建产物
+dist/
+build/
+*.tsbuildinfo

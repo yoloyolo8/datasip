@@ -1,0 +1,288 @@
+{
+  "name": "A2 - Link Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "datasip-link",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "datasip-link"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-type",
+              "leftValue": "={{ $json.body.type }}",
+              "rightValue": "url",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-url",
+      "name": "Is URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "=分析以下网页内容，生成:\n1. 一句话摘要 (不超过100字)\n2. 3-5个标签 (用逗号分隔)\n3. 推测用户保存这篇文章的意图/关注点 (一个问题)\n\n标题: {{ $json.body.fetched_content.title }}\n\n内容:\n{{ $json.body.fetched_content.text.substring(0, 3000) }}\n\n请按以下JSON格式返回:\n{\"summary\": \"...\", \"tags\": [\"tag1\", \"tag2\"], \"inferred_intention\": \"...\"}"
+            }
+          ]
+        },
+        "options": {
+          "response_format": {
+            "type": "json_object"
+          }
+        }
+      },
+      "id": "analyze-content",
+      "name": "Analyze Content",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [690, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst webhook = $('Webhook').first().json;\nconst analysis = JSON.parse(input.message.content);\n\nreturn {\n  url: webhook.body.url,\n  title: webhook.body.fetched_content.title,\n  content_type: 'blog',\n  raw_content: JSON.stringify({\n    schema_version: '1.0',\n    fetched_at: webhook.body.fetched_content.fetched_at,\n    source: { type: 'manual', telegram_user: webhook.body.telegram.username },\n    content: {\n      title: webhook.body.fetched_content.title,\n      url: webhook.body.url,\n      text: webhook.body.fetched_content.text\n    }\n  }),\n  summary: analysis.summary,\n  tags: analysis.tags,\n  is_manual: true,\n  inferred_intention: analysis.inferred_intention,\n  telegram: webhook.body.telegram\n};"
+      },
+      "id": "prepare-data",
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 200]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "data_inbox",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "url": "={{ $json.url }}",
+            "title": "={{ $json.title }}",
+            "content_type": "={{ $json.content_type }}",
+            "raw_content": "={{ $json.raw_content }}",
+            "summary": "={{ $json.summary }}",
+            "tags": "={{ $json.tags }}",
+            "is_manual": true
+          }
+        },
+        "options": {
+          "onConflict": "nothing"
+        }
+      },
+      "id": "insert-data",
+      "name": "Insert Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1130, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred",
+          "name": "DataSip PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "intentions",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "content": "={{ $('Prepare Data').item.json.inferred_intention }}",
+            "source_type": "link_inference",
+            "source_context": "=Inferred from {{ $('Prepare Data').item.json.url }}",
+            "source_data_id": "={{ $json.id }}",
+            "intent_type": "implicit",
+            "status": "open"
+          }
+        },
+        "options": {}
+      },
+      "id": "insert-intention",
+      "name": "Insert Intention",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1350, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred",
+          "name": "DataSip PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $('Prepare Data').item.json.telegram.chat_id }}"
+            },
+            {
+              "name": "text",
+              "value": "=✅ 已保存文章\n\n<b>{{ $('Prepare Data').item.json.title }}</b>\n\n📝 {{ $('Prepare Data').item.json.summary }}\n\n🏷️ {{ $('Prepare Data').item.json.tags.join(', ') }}\n\n🔍 推测你关注: {{ $('Prepare Data').item.json.inferred_intention }}\n\n已创建隐性意图 (ID: {{ $json.id.substring(0, 8) }})"
+            },
+            {
+              "name": "parse_mode",
+              "value": "HTML"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-result",
+      "name": "Send Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {},
+      "id": "no-op-end",
+      "name": "End",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [690, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is URL?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is URL?": {
+      "main": [
+        [
+          {
+            "node": "Analyze Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "End",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Content": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data": {
+      "main": [
+        [
+          {
+            "node": "Insert Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Data": {
+      "main": [
+        [
+          {
+            "node": "Insert Intention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Intention": {
+      "main": [
+        [
+          {
+            "node": "Send Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "datasip"
+    }
+  ],
+  "triggerCount": 0,
+  "pinData": {},
+  "versionId": "1"
+}
