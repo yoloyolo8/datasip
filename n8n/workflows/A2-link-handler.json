@@ -1,5 +1,6 @@
 {
   "name": "A2 - Link Handler",
+  "active": false,
   "nodes": [
     {
       "parameters": {
@@ -45,35 +46,42 @@
     },
     {
       "parameters": {
-        "model": "gpt-4o-mini",
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "content": "=分析以下网页内容，生成:\n1. 一句话摘要 (不超过100字)\n2. 3-5个标签 (用逗号分隔)\n3. 推测用户保存这篇文章的意图/关注点 (一个问题)\n\n标题: {{ $json.body.fetched_content.title }}\n\n内容:\n{{ $json.body.fetched_content.text.substring(0, 3000) }}\n\n请按以下JSON格式返回:\n{\"summary\": \"...\", \"tags\": [\"tag1\", \"tag2\"], \"inferred_intention\": \"...\"}"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'openai/gpt-4o-mini',\n  messages: [\n    {\n      role: 'user',\n      content: '分析以下网页内容，生成:\\n1. 一句话摘要 (不超过100字)\\n2. 3-5个标签 (用逗号分隔)\\n3. 推测用户保存这篇文章的意图/关注点 (一个问题)\\n\\n标题: ' + $json.body.fetched_content.title + '\\n\\n内容:\\n' + $json.body.fetched_content.text.substring(0, 3000) + '\\n\\n请按以下JSON格式返回:\\n{\"summary\": \"...\", \"tags\": [\"tag1\", \"tag2\"], \"inferred_intention\": \"...\"}'\n    }\n  ],\n  response_format: { type: 'json_object' }\n}) }}",
         "options": {
-          "response_format": {
-            "type": "json_object"
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
           }
         }
       },
       "id": "analyze-content",
       "name": "Analyze Content",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [690, 200],
-      "credentials": {
-        "openAiApi": {
-          "id": "openai-cred",
-          "name": "OpenAI API"
-        }
-      }
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 200]
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst webhook = $('Webhook').first().json;\nconst analysis = JSON.parse(input.message.content);\n\nreturn {\n  url: webhook.body.url,\n  title: webhook.body.fetched_content.title,\n  content_type: 'blog',\n  raw_content: JSON.stringify({\n    schema_version: '1.0',\n    fetched_at: webhook.body.fetched_content.fetched_at,\n    source: { type: 'manual', telegram_user: webhook.body.telegram.username },\n    content: {\n      title: webhook.body.fetched_content.title,\n      url: webhook.body.url,\n      text: webhook.body.fetched_content.text\n    }\n  }),\n  summary: analysis.summary,\n  tags: analysis.tags,\n  is_manual: true,\n  inferred_intention: analysis.inferred_intention,\n  telegram: webhook.body.telegram\n};"
+        "jsCode": "const input = $input.first().json;\nconst webhook = $('Webhook').first().json;\nconst analysis = JSON.parse(input.choices[0].message.content);\n\nreturn {\n  url: webhook.body.url,\n  title: webhook.body.fetched_content.title,\n  content_type: 'blog',\n  raw_content: JSON.stringify({\n    schema_version: '1.0',\n    fetched_at: webhook.body.fetched_content.fetched_at,\n    source: { type: 'manual', telegram_user: webhook.body.telegram.username },\n    content: {\n      title: webhook.body.fetched_content.title,\n      url: webhook.body.url,\n      text: webhook.body.fetched_content.text\n    }\n  }),\n  summary: analysis.summary,\n  tags: analysis.tags,\n  is_manual: true,\n  inferred_intention: analysis.inferred_intention,\n  telegram: webhook.body.telegram\n};"
       },
       "id": "prepare-data",
       "name": "Prepare Data",

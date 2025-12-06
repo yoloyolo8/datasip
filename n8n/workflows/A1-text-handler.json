@@ -1,5 +1,6 @@
 {
   "name": "A1 - Text Handler",
+  "active": false,
   "nodes": [
     {
       "parameters": {
@@ -13,35 +14,6 @@
       "typeVersion": 2,
       "position": [250, 300],
       "webhookId": "datasip-main"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "check-secret",
-              "leftValue": "={{ $json.headers['x-webhook-secret'] }}",
-              "rightValue": "={{ $env.WEBHOOK_SECRET }}",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "check-auth",
-      "name": "Check Auth",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [470, 300]
     },
     {
       "parameters": {
@@ -74,27 +46,38 @@
     },
     {
       "parameters": {
-        "model": "gpt-4o-mini",
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "content": "=你是一个意图提取助手。从用户的文本中提取问题或意图。\n\n用户文本:\n{{ $json.body.content }}\n\n请提取出用户想要了解或解决的核心问题。如果文本本身就是一个问题，直接返回。如果是陈述，推理出背后的问题。\n\n只返回提取的问题，不要其他内容。"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
-        "options": {}
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'openai/gpt-4o-mini',\n  messages: [\n    {\n      role: 'user',\n      content: '你是一个意图提取助手。从用户的文本中提取问题或意图。\\n\\n用户文本:\\n' + $json.content + '\\n\\n请提取出用户想要了解或解决的核心问题。如果文本本身就是一个问题，直接返回。如果是陈述，推理出背后的问题。\\n\\n只返回提取的问题，不要其他内容。'\n    }\n  ]\n}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
       },
       "id": "extract-intention",
       "name": "Extract Intention",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [910, 200],
-      "credentials": {
-        "openAiApi": {
-          "id": "openai-cred",
-          "name": "OpenAI API"
-        }
-      }
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [910, 200]
     },
     {
       "parameters": {
@@ -112,9 +95,9 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "content": "={{ $json.message.content }}",
+            "content": "={{ $json.choices[0].message.content }}",
             "source_type": "text",
-            "source_context": "=Telegram from {{ $('Webhook').item.json.body.telegram.username || $('Webhook').item.json.body.telegram.user_id }}",
+            "source_context": "=Telegram from {{ $('Webhook').item.json.telegram.username || $('Webhook').item.json.telegram.user_id }}",
             "intent_type": "explicit",
             "status": "open"
           }
@@ -142,11 +125,11 @@
           "parameters": [
             {
               "name": "chat_id",
-              "value": "={{ $('Webhook').item.json.body.telegram.chat_id }}"
+              "value": "={{ $('Webhook').item.json.telegram.chat_id }}"
             },
             {
               "name": "text",
-              "value": "=✅ 已记录问题\n\n问题: {{ $('Extract Intention').item.json.message.content }}\n\nID: {{ $('Insert Intention').item.json.id.substring(0, 8) }}\n状态: 待解决\n\n我会持续关注相关内容，找到答案后通知你。"
+              "value": "=✅ 已记录问题\n\n问题: {{ $('Extract Intention').item.json.choices[0].message.content }}\n\nID: {{ $('Insert Intention').item.json.id.substring(0, 8) }}\n状态: 待解决\n\n我会持续关注相关内容，找到答案后通知你。"
             },
             {
               "name": "parse_mode",
@@ -176,25 +159,7 @@
       "main": [
         [
           {
-            "node": "Check Auth",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Auth": {
-      "main": [
-        [
-          {
             "node": "Is Text?",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "End",
             "type": "main",
             "index": 0
           }

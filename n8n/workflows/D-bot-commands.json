@@ -1,5 +1,6 @@
 {
   "name": "D - Bot Commands",
+  "active": false,
   "nodes": [
     {
       "parameters": {

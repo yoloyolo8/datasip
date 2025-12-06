@@ -1,6 +1,7 @@
 name = "datasip"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
+account_id = "c5a70b9a15f68cd2596d7ce8ebb9a2a6"
 
 # 定时任务
 [triggers]

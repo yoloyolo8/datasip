@@ -1,5 +1,6 @@
 {
   "name": "C1 - Daily Matcher",
+  "active": false,
   "nodes": [
     {
       "parameters": {
@@ -110,35 +111,42 @@
     },
     {
       "parameters": {
-        "model": "gpt-4o-mini",
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "content": "=用户的问题: {{ $('Get Open Intentions').item.json.content }}\n\n找到的相关内容:\n{{ JSON.stringify($json.slice(0, 3).map(d => ({ title: d.title, summary: d.summary }))) }}\n\n请判断这些内容是否能帮助回答用户的问题。\n返回JSON: {\"is_relevant\": true/false, \"relevance_score\": 0-1, \"summary\": \"如何回答问题的简要说明\"}"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'openai/gpt-4o-mini',\n  messages: [\n    {\n      role: 'user',\n      content: '用户的问题: ' + $('Get Open Intentions').item.json.content + '\\n\\n找到的相关内容:\\n' + JSON.stringify($json.slice(0, 3).map(d => ({ title: d.title, summary: d.summary }))) + '\\n\\n请判断这些内容是否能帮助回答用户的问题。\\n返回JSON: {\"is_relevant\": true/false, \"relevance_score\": 0-1, \"summary\": \"如何回答问题的简要说明\"}'\n    }\n  ],\n  response_format: { type: 'json_object' }\n}) }}",
         "options": {
-          "response_format": {
-            "type": "json_object"
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
           }
         }
       },
       "id": "judge-relevance",
       "name": "Judge Relevance",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.4,
-      "position": [1350, 100],
-      "credentials": {
-        "openAiApi": {
-          "id": "openai-cred",
-          "name": "OpenAI API"
-        }
-      }
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 100]
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst digest = [];\n\nfor (const item of items) {\n  try {\n    const result = JSON.parse(item.json.message.content);\n    if (result.is_relevant && result.relevance_score > 0.6) {\n      digest.push({\n        intention: $('Get Open Intentions').first().json.content,\n        intention_id: $('Get Open Intentions').first().json.id,\n        relevance_score: result.relevance_score,\n        summary: result.summary\n      });\n    }\n  } catch (e) {\n    // ignore parse errors\n  }\n}\n\nreturn { digest, has_content: digest.length > 0 };"
+        "jsCode": "const items = $input.all();\nconst digest = [];\n\nfor (const item of items) {\n  try {\n    const result = JSON.parse(item.json.choices[0].message.content);\n    if (result.is_relevant && result.relevance_score > 0.6) {\n      digest.push({\n        intention: $('Get Open Intentions').first().json.content,\n        intention_id: $('Get Open Intentions').first().json.id,\n        relevance_score: result.relevance_score,\n        summary: result.summary\n      });\n    }\n  } catch (e) {\n    // ignore parse errors\n  }\n}\n\nreturn { digest, has_content: digest.length > 0 };"
       },
       "id": "build-digest",
       "name": "Build Digest",

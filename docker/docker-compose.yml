@@ -43,6 +43,15 @@ services:
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       # 加密密钥
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      # 应用密钥
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      # LLM API
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - PORTKEY_API_KEY_user=${PORTKEY_API_KEY_user}
+      - PORTKEY_API_KEY_service=${PORTKEY_API_KEY_service}
     volumes:
       - n8n_data:/home/node/.n8n
       - ../n8n/workflows:/data/workflows:ro
